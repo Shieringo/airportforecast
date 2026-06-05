@@ -2,14 +2,68 @@
 vapor app.py  - ベイパー予報 Webアプリ
 ユニークURLで各ユーザーの設定を管理する
 """
+import base64
+import io
 import json
 import os
 import uuid
 import requests
 import streamlit as st
 from datetime import datetime, timezone, timedelta
+from PIL import Image, ImageDraw, ImageFilter
 
 JST = timezone(timedelta(hours=9))
+
+
+def _bezier(p0, p1, p2, n=80):
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        x = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t ** 2 * p2[0]
+        y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t ** 2 * p2[1]
+        pts.append((x, y))
+    return pts
+
+
+@st.cache_data
+def _build_icon_b64():
+    size = 180
+    img = Image.new("RGBA", (size, size), (18, 18, 40, 255))
+    cx = size // 2
+    tip_x, tip_y = cx, int(size * 0.18)
+
+    lp = _bezier((tip_x - 10, tip_y + 14), (tip_x - 55, tip_y + 70), (tip_x - 68, tip_y + 145))
+    rp = _bezier((tip_x + 10, tip_y + 14), (tip_x + 55, tip_y + 70), (tip_x + 68, tip_y + 145))
+
+    glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    for pts in (lp, rp):
+        for i in range(len(pts) - 1):
+            t = i / len(pts)
+            gd.line([pts[i], pts[i + 1]], fill=(160, 210, 255, int(90 * (1 - t * 0.6))),
+                    width=max(2, int(14 * (1 - t * 0.5))))
+    glow = glow.filter(ImageFilter.GaussianBlur(6))
+    img = Image.alpha_composite(img, glow)
+
+    draw = ImageDraw.Draw(img)
+    for pts in (lp, rp):
+        for i in range(len(pts) - 1):
+            t = i / len(pts)
+            draw.line([pts[i], pts[i + 1]], fill=(210, 235, 255, int(240 * (1 - t * 0.35))),
+                      width=max(1, int(6 * (1 - t * 0.65))))
+
+    bx, by = tip_x, tip_y
+    draw.polygon([(bx, by), (bx - 4, by + 20), (bx + 4, by + 20)], fill=(255, 255, 255, 255))
+    draw.rounded_rectangle([bx - 4, by + 18, bx + 4, by + 38], radius=3, fill=(240, 240, 255, 255))
+    draw.polygon([(bx - 4, by + 22), (bx + 4, by + 22), (bx + 22, by + 32),
+                  (bx + 18, by + 36), (bx, by + 30), (bx - 18, by + 36), (bx - 22, by + 32)],
+                 fill=(255, 255, 255, 240))
+    draw.polygon([(bx - 4, by + 34), (bx + 4, by + 34), (bx + 10, by + 42), (bx - 10, by + 42)],
+                 fill=(220, 230, 255, 220))
+
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
 USERS_DIR = os.path.join(os.path.dirname(__file__), "users")
 os.makedirs(USERS_DIR, exist_ok=True)
 
@@ -146,6 +200,12 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed",
 )
+
+_icon_b64 = _build_icon_b64()
+st.markdown(f"""
+<link rel="icon" type="image/png" href="data:image/png;base64,{_icon_b64}">
+<link rel="apple-touch-icon" href="data:image/png;base64,{_icon_b64}">
+""", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
