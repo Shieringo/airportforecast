@@ -25,8 +25,7 @@ def _bezier(p0, p1, p2, n=80):
     return pts
 
 
-@st.cache_data
-def _build_icon_b64():
+def _make_icon():
     size = 180
     img = Image.new("RGBA", (size, size), (18, 18, 40, 255))
     cx = size // 2
@@ -60,10 +59,14 @@ def _build_icon_b64():
                  fill=(255, 255, 255, 240))
     draw.polygon([(bx - 4, by + 34), (bx + 4, by + 34), (bx + 10, by + 42), (bx - 10, by + 42)],
                  fill=(220, 230, 255, 220))
+    return img
 
-    buf = io.BytesIO()
-    img.convert("RGB").save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+
+# モジュールロード時に生成（PIL Image → page_icon に直接渡す / base64 → apple-touch-icon JS注入用）
+_ICON_IMG = _make_icon()
+_buf = io.BytesIO()
+_ICON_IMG.convert("RGB").save(_buf, format="PNG")
+_ICON_B64 = base64.b64encode(_buf.getvalue()).decode()
 USERS_DIR = os.path.join(os.path.dirname(__file__), "users")
 os.makedirs(USERS_DIR, exist_ok=True)
 
@@ -196,16 +199,20 @@ def show_card(code, name):
 # ページ設定
 st.set_page_config(
     page_title="ベイパー予報",
-    page_icon="✈️",
+    page_icon=_ICON_IMG,
     layout="centered",
     initial_sidebar_state="collapsed",
 )
 
-_icon_b64 = _build_icon_b64()
-st.markdown(f"""
-<link rel="icon" type="image/png" href="data:image/png;base64,{_icon_b64}">
-<link rel="apple-touch-icon" href="data:image/png;base64,{_icon_b64}">
-""", unsafe_allow_html=True)
+# apple-touch-icon（iOSホーム画面追加時のアイコン）をJSで<head>に注入
+st.markdown(f"""<script>
+(function(){{
+  var l=document.createElement('link');
+  l.rel='apple-touch-icon';
+  l.href='data:image/png;base64,{_ICON_B64}';
+  document.head.appendChild(l);
+}})();
+</script>""", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
