@@ -218,14 +218,14 @@ r_idx = resolve_code_to_indices(resolve_code)[0] if resolve_code else None
 selected_region = st.selectbox(
     "地域", region_names,
     index=r_idx,
-    placeholder="-地域を選択-",
+    placeholder="- 地域を選択 -",
 )
 
 if "jump_code" in st.session_state:
     del st.session_state["jump_code"]
 
 if selected_region is None:
-    st.selectbox("空港", [], index=None, placeholder="-空港を選択-", disabled=True)
+    st.selectbox("空港", [], index=None, placeholder="- 空港を選択 -", disabled=True)
     selected_code = None
 else:
     airports_in_region = AIRPORTS_BY_REGION[selected_region]
@@ -242,7 +242,7 @@ else:
     selected_ap_label = st.selectbox(
         "空港", airport_labels,
         index=ap_idx,
-        placeholder="-空港を選択-",
+        placeholder="- 空港を選択 -",
     )
 
     selected_code = (
