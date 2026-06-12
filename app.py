@@ -43,36 +43,36 @@ def _make_icon():
     size = 180
     img = Image.new("RGBA", (size, size), (18, 18, 40, 255))
     cx = size // 2
-    tip_x, tip_y = cx, int(size * 0.18)
 
-    lp = _bezier((tip_x - 10, tip_y + 14), (tip_x - 55, tip_y + 70), (tip_x - 68, tip_y + 145))
-    rp = _bezier((tip_x + 10, tip_y + 14), (tip_x + 55, tip_y + 70), (tip_x + 68, tip_y + 145))
-
+    # cab glow
     glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
-    for pts in (lp, rp):
-        for i in range(len(pts) - 1):
-            t = i / len(pts)
-            gd.line([pts[i], pts[i + 1]], fill=(160, 210, 255, int(90 * (1 - t * 0.6))),
-                    width=max(2, int(14 * (1 - t * 0.5))))
-    glow = glow.filter(ImageFilter.GaussianBlur(6))
+    gd.rounded_rectangle([cx - 52, 22, cx + 52, 80], radius=14, fill=(80, 160, 255, 65))
+    glow = glow.filter(ImageFilter.GaussianBlur(10))
     img = Image.alpha_composite(img, glow)
 
     draw = ImageDraw.Draw(img)
-    for pts in (lp, rp):
-        for i in range(len(pts) - 1):
-            t = i / len(pts)
-            draw.line([pts[i], pts[i + 1]], fill=(210, 235, 255, int(240 * (1 - t * 0.35))),
-                      width=max(1, int(6 * (1 - t * 0.65))))
+    body = (200, 225, 252, 255)
+    cab  = (120, 195, 255, 255)
+    hi   = (215, 238, 255, 130)
 
-    bx, by = tip_x, tip_y
-    draw.polygon([(bx, by), (bx - 4, by + 20), (bx + 4, by + 20)], fill=(255, 255, 255, 255))
-    draw.rounded_rectangle([bx - 4, by + 18, bx + 4, by + 38], radius=3, fill=(240, 240, 255, 255))
-    draw.polygon([(bx - 4, by + 22), (bx + 4, by + 22), (bx + 22, by + 32),
-                  (bx + 18, by + 36), (bx, by + 30), (bx - 18, by + 36), (bx - 22, by + 32)],
-                 fill=(255, 255, 255, 240))
-    draw.polygon([(bx - 4, by + 34), (bx + 4, by + 34), (bx + 10, by + 42), (bx - 10, by + 42)],
-                 fill=(220, 230, 255, 220))
+    # base platform
+    draw.rounded_rectangle([cx - 56, 144, cx + 56, 162], radius=6, fill=body)
+    # lower widening
+    draw.rounded_rectangle([cx - 38, 118, cx + 38, 148], radius=5, fill=body)
+    # shaft
+    draw.rectangle([cx - 13, 72, cx + 13, 122], fill=body)
+    # collar (overhang below cab)
+    draw.rounded_rectangle([cx - 34, 66, cx + 34, 78], radius=4, fill=body)
+    # cab
+    draw.rounded_rectangle([cx - 46, 24, cx + 46, 72], radius=9, fill=cab)
+    # cab glass highlight
+    draw.rounded_rectangle([cx - 39, 29, cx + 39, 52], radius=7, fill=hi)
+    # antenna mast
+    draw.line([cx, 7, cx, 24], fill=(255, 255, 255, 220), width=3)
+    # beacon
+    draw.ellipse([cx - 5, 3, cx + 5, 13], fill=(255, 220, 70, 255))
+
     return img
 
 
@@ -904,6 +904,7 @@ Td = 243.04 × α / (17.625 − α)
 
     # ワンフォー（伊丹専用）
     if selected_code == "RJOO":
+        st.markdown("### ✈ ワンフォー予報")
         try:
             show_rwy14_card(selected_code, fetch_metar(selected_code))
         except Exception:
