@@ -317,10 +317,10 @@ def show_rwy14_card(code, item):
   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
     <div>
       <div style="font-size:1.3em;font-weight:bold;color:#fff;">{wind_info}</div>
-      <div style="font-size:0.82em;color:#888;margin-top:4px;">追い風成分: {tailwind}（青色セル値）{blue_label}</div>
+      <div style="font-size:1.2em;font-weight:bold;color:#ccc;margin-top:6px;">追い風成分: {tailwind}{blue_label}</div>
     </div>
     <div style="text-align:right;">
-      <div style="font-size:0.72em;color:#999;">BZスコア</div>
+      <div style="font-size:0.72em;color:#999;">ワンフォースコア</div>
       <div style="font-size:2.6em;font-weight:bold;color:#fff;line-height:1.1;">{prob}<span style="font-size:0.5em;color:#888;">%</span></div>
     </div>
   </div>
@@ -328,9 +328,43 @@ def show_rwy14_card(code, item):
     <div style="height:8px;border-radius:4px;background:{card_color};width:{prob}%;"></div>
   </div>
   <div style="font-size:1.1em;font-weight:bold;color:{card_color};">{verdict}</div>
-  <div style="font-size:0.75em;color:#666;margin-top:8px;">青色セル値（追い風成分）が 9.0〜11.9 で接近、12.0 以上が断続的に続く場合に RWY14 運用になる可能性があります</div>
+  <div style="font-size:0.75em;color:#666;margin-top:8px;">追い風成分が 9.0〜11.9 でランチェン可能性あり、12.0 以上が断続的に続く場合に RWY14 運用になる可能性が大きくなります。</div>
 </div>
 """, unsafe_allow_html=True)
+    with st.expander("📐 ワンフォースコアの計算式"):
+        st.markdown(f"""
+**追い風成分（青色セル値）**
+```
+追い風成分 = 風速 × cos(風向 − 140°)
+```
+- `風向` = METAR の風向（度）
+- `風速` = METAR の風速（kt）
+- `140°` = RWY32（逆方向 RWY14）の滑走路方位
+
+現在の値: {wdir_f:.0f}° / {wspd_f:.0f}kt → 追い風成分 **{tailwind}**
+
+---
+
+**判定基準**
+
+| 追い風成分 | 判定 |
+|---|---|
+| 12.0 以上 | 🔴 断続継続で RWY14 運用の可能性大 |
+| 9.0〜11.9 | 🟡 ランチェン可能性あり |
+| 9.0 未満 | 🟢 RWY32 通常運用 |
+
+🔵 ブルーゾーン = 追い風成分 10.0 以上（追い風成分表の青色セル）
+
+---
+
+**データソース**
+
+| 項目 | 取得元 |
+|---|---|
+| 風向・風速 | aviationweather.gov（METAR） |
+| 滑走路方位 | RWY14/32 磁方位 140°/320° |
+""")
+        st.caption("30分キャッシュ | 伊丹空港（RJOO）専用")
 
 
 def show_card(code, name):
