@@ -566,20 +566,8 @@ if selected_code:
 
     show_card(selected_code, selected_name)
 
-    # 伊丹専用: RWY14運用確率
-    if selected_code == "RJOO":
-        try:
-            show_rwy14_card(selected_code, fetch_metar(selected_code))
-        except Exception:
-            pass
-
-    if st.button("🔄 データを更新", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-# 計算式
-with st.expander("📐 ベイパー発生の計算式"):
-    st.markdown("""
+    with st.expander("📐 ベイパー発生の計算式"):
+        st.markdown("""
 **スプレッド（温度差）**
 ```
 スプレッド = 気温 − 露点温度
@@ -620,7 +608,18 @@ Td = 243.04 × α / (17.625 − α)
 - 朝方・雨上がり直後・海沿い → 湿度が高くなりやすい
 - 大型機・フル高揚力装置展開の着陸時 → 渦が強く出やすい
 """)
-    st.caption("データソース: aviationweather.gov（METAR）| 30分キャッシュ")
+        st.caption("データソース: aviationweather.gov（METAR）| 30分キャッシュ")
+
+    # 伊丹専用: RWY14運用確率
+    if selected_code == "RJOO":
+        try:
+            show_rwy14_card(selected_code, fetch_metar(selected_code))
+        except Exception:
+            pass
+
+    if st.button("🔄 データを更新", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 # 爆焼け予報セクション
 st.divider()
