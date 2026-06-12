@@ -317,7 +317,7 @@ def show_rwy14_card(code, item):
   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
     <div>
       <div style="font-size:1.3em;font-weight:bold;color:#fff;">{wind_info}</div>
-      <div style="font-size:0.82em;color:#888;margin-top:4px;">RWY32 追い風成分: {tailwind}kt{blue_label}</div>
+      <div style="font-size:0.82em;color:#888;margin-top:4px;">追い風成分: {tailwind}（青色セル値）{blue_label}</div>
     </div>
     <div style="text-align:right;">
       <div style="font-size:0.72em;color:#999;">BZスコア</div>
@@ -328,7 +328,7 @@ def show_rwy14_card(code, item):
     <div style="height:8px;border-radius:4px;background:{card_color};width:{prob}%;"></div>
   </div>
   <div style="font-size:1.1em;font-weight:bold;color:{card_color};">{verdict}</div>
-  <div style="font-size:0.75em;color:#666;margin-top:8px;">追い風成分 10.0kt 以上が断続的に続く場合、RWY14 運用になる可能性があります</div>
+  <div style="font-size:0.75em;color:#666;margin-top:8px;">青色セル値（追い風成分）が 9.0〜11.9 で接近、12.0 以上が断続的に続く場合に RWY14 運用になる可能性があります</div>
 </div>
 """, unsafe_allow_html=True)
 
