@@ -13,6 +13,19 @@ import streamlit as st
 from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFilter
 
+try:
+    from astral import LocationInfo as _AstralLocation
+    from astral.moon import phase as _astral_moon_phase, moonrise as _astral_moonrise
+    _ASTRAL_OK = True
+except ImportError:
+    _ASTRAL_OK = False
+
+try:
+    import ephem as _ephem
+    _EPHEM_OK = True
+except ImportError:
+    _EPHEM_OK = False
+
 JST = timezone(timedelta(hours=9))
 
 
@@ -364,6 +377,144 @@ def show_rwy14_card(code, item):
         st.caption("30分キャッシュ | 伊丹空港（RJOO）専用")
 
 
+def make_moon_image(phase_ratio: float, size: int = 80) -> Image.Image:
+    """月の形をPILで描画。phase_ratio: 0=新月, 0.5=満月"""
+    try:
+        import numpy as np
+        p = float(phase_ratio)
+        yc, xc = np.mgrid[0:size, 0:size]
+        cx = cy = (size - 1) / 2.0
+        r = (size / 2) * 0.90
+        nx = (xc - cx) / r
+        ny = (yc - cy) / r
+        inside = nx ** 2 + ny ** 2 <= 1.0
+        sqrt_t = np.sqrt(np.maximum(0.0, 1.0 - ny ** 2))
+        if p <= 0.5:
+            lit = nx > (1.0 - 4.0 * p) * sqrt_t
+        else:
+            lit = -nx > (4.0 * (p - 0.5) - 1.0) * sqrt_t
+        rgba = np.zeros((size, size, 4), dtype=np.uint8)
+        rgba[inside & lit] = [255, 240, 180, 255]
+        rgba[inside & ~lit] = [25, 25, 45, 200]
+        return Image.fromarray(rgba, "RGBA")
+    except Exception:
+        return Image.new("RGBA", (size, size), (80, 80, 80, 180))
+
+
+def _moon_b64(phase_ratio: float, size: int = 80) -> str:
+    buf = io.BytesIO()
+    make_moon_image(phase_ratio, size).save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def moon_phase_name(age: float) -> str:
+    a = age % 29.53
+    if a < 1.5:    return "新月"
+    elif a < 5.5:  return "三日月"
+    elif a < 9.5:  return "上弦前"
+    elif a < 11.5: return "上弦の月"
+    elif a < 13.5: return "十三夜"
+    elif a < 15.5: return "満月"
+    elif a < 17.5: return "十六夜"
+    elif a < 19.5: return "立待月"
+    elif a < 21.5: return "居待月"
+    elif a < 23.5: return "下弦の月"
+    elif a < 26.5: return "下弦後"
+    else:          return "晦日月"
+
+
+@st.cache_data(ttl=3600)
+def get_moon_data(lat: float, lon: float, date_offset: int = 0) -> dict:
+    target_date = (datetime.now(JST) + timedelta(days=date_offset)).date()
+    result = {
+        "age": 0.0, "phase_ratio": 0.0, "illumination": 0,
+        "phase_name": "---", "rise_time": "---", "rise_az": "---",
+        "date": target_date,
+    }
+    if _ASTRAL_OK:
+        try:
+            age = _astral_moon_phase(target_date)
+            pr = age / 29.53
+            result.update({
+                "age": round(age, 1),
+                "phase_ratio": pr,
+                "illumination": round((1 - math.cos(2 * math.pi * pr)) / 2 * 100),
+                "phase_name": moon_phase_name(age),
+            })
+        except Exception:
+            pass
+        try:
+            loc = _AstralLocation(latitude=lat, longitude=lon, timezone="Asia/Tokyo")
+            rise_dt = _astral_moonrise(loc.observer, target_date, loc.timezone)
+            if rise_dt:
+                result["rise_time"] = rise_dt.strftime("%H:%M")
+                if _EPHEM_OK:
+                    obs = _ephem.Observer()
+                    obs.lat = str(lat)
+                    obs.lon = str(lon)
+                    obs.date = _ephem.Date(rise_dt.astimezone(timezone.utc))
+                    m = _ephem.Moon()
+                    m.compute(obs)
+                    result["rise_az"] = f"{math.degrees(float(m.az)):.0f}°"
+        except Exception:
+            pass
+    return result
+
+
+def show_moon_section(selected_code: str):
+    if selected_code not in AIRPORT_COORDS:
+        return
+    lat, lon = AIRPORT_COORDS[selected_code]
+    airport_name = get_airport_name(selected_code)
+    st.markdown("### 🌕 月情報")
+    st.caption("月齢・月相・輝面比・月の出時刻と方角")
+    try:
+        today = get_moon_data(lat, lon, 0)
+        t_b64 = _moon_b64(today["phase_ratio"], 100)
+        st.markdown(f"""
+<div style="border-radius:18px;padding:22px 20px 16px;margin:14px 0;
+     border-left:7px solid #b8860b;background:#1a1a0e;">
+  <div style="font-size:0.78em;color:#999;margin-bottom:10px;">{airport_name}</div>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <img src="data:image/png;base64,{t_b64}" width="100" height="100"
+         style="border-radius:50%;flex-shrink:0;">
+    <div>
+      <div style="font-size:1.6em;font-weight:bold;color:#fff;">{today['phase_name']}</div>
+      <div style="font-size:1.0em;color:#ccc;margin-top:6px;">月齢 {today['age']} 日　輝面比 {today['illumination']}%</div>
+      <div style="font-size:0.9em;color:#aaa;margin-top:6px;">🌙 月の出 {today['rise_time']}　方角 {today['rise_az']}</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        WDAYS = ["月", "火", "水", "木", "金", "土", "日"]
+        mini_items = []
+        for i in range(1, 7):
+            d = get_moon_data(lat, lon, i)
+            dd = d["date"]
+            wd = WDAYS[dd.weekday()]
+            ds = "明日" if i == 1 else f"{dd.month}/{dd.day}"
+            lbl = f'{ds}<br><span style="color:#666;font-size:0.9em;">({wd})</span>'
+            mb64 = _moon_b64(d["phase_ratio"], 40)
+            mini_items.append(
+                f'<div style="flex:1;min-width:0;text-align:center;padding:10px 4px 8px;'
+                f'border-radius:12px;background:#1a1a0e;border:1px solid #b8860b;">'
+                f'<div style="font-size:0.7em;color:#999;margin-bottom:4px;line-height:1.4;">{lbl}</div>'
+                f'<div style="display:flex;justify-content:center;margin-bottom:4px;">'
+                f'<img src="data:image/png;base64,{mb64}" width="36" height="36" style="border-radius:50%;"></div>'
+                f'<div style="font-size:0.8em;font-weight:bold;color:#fff;white-space:nowrap;">{d["phase_name"]}</div>'
+                f'<div style="font-size:0.68em;color:#888;">{d["illumination"]}%</div>'
+                f'<div style="font-size:0.65em;color:#777;margin-top:2px;">{d["rise_time"]}</div>'
+                f'</div>'
+            )
+        st.markdown(
+            '<div style="display:flex;gap:6px;width:100%;box-sizing:border-box;padding:6px 0 2px;">'
+            + "".join(mini_items) + "</div>",
+            unsafe_allow_html=True,
+        )
+    except Exception as e:
+        st.error(f"月情報の取得エラー: {e}")
+
+
 def show_card(code, name):
     try:
         item = fetch_metar(code)
@@ -698,6 +849,8 @@ if selected_code:
 日没時刻を含む1時間ブロック（例: 日没19:11 → 19:00台）の気象データを使用。キャッシュ: 30分。
 """)
         st.caption("空港座標から Open-Meteo API（無料・APIキー不要）で取得")
+
+    show_moon_section(selected_code)
 
     st.divider()
 
