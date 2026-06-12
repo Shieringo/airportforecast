@@ -301,26 +301,26 @@ def show_rwy14_card(code, item):
     in_blue = tailwind >= 10.0
     blue_label = "　🔵 ブルーゾーン" if in_blue else ""
 
-    if prob >= 70:
+    if tailwind >= 10.0:
         card_color, bg_color = "#e74c3c", "#270b0b"
-        verdict = "🔴 RWY14 運用の可能性大"
-    elif prob >= 40:
+        verdict = "🔴 ブルーゾーン — 状態が続けば RWY14 の可能性"
+    elif tailwind >= 6.0:
         card_color, bg_color = "#f39c12", "#271c08"
-        verdict = "🟡 RWY14 運用の可能性あり"
+        verdict = "🟡 ブルーゾーン接近中"
     else:
         card_color, bg_color = "#2ecc71", "#0b2118"
         verdict = "🟢 RWY32 通常運用"
 
     st.markdown(f"""
 <div style="border-radius:18px;padding:18px 20px;margin:14px 0;border-left:7px solid {card_color};background:{bg_color};">
-  <div style="font-size:0.78em;color:#999;margin-bottom:8px;">✈ RWY14 運用確率 — 大阪国際空港</div>
+  <div style="font-size:0.78em;color:#999;margin-bottom:8px;">✈ RWY14 運用可能性 — 大阪国際空港</div>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;">
     <div>
       <div style="font-size:1.3em;font-weight:bold;color:#fff;">{wind_info}</div>
       <div style="font-size:0.82em;color:#888;margin-top:4px;">RWY32 追い風成分: {tailwind}kt{blue_label}</div>
     </div>
     <div style="text-align:right;">
-      <div style="font-size:0.72em;color:#999;">RWY14確率</div>
+      <div style="font-size:0.72em;color:#999;">BZスコア</div>
       <div style="font-size:2.6em;font-weight:bold;color:#fff;line-height:1.1;">{prob}<span style="font-size:0.5em;color:#888;">%</span></div>
     </div>
   </div>
@@ -328,6 +328,7 @@ def show_rwy14_card(code, item):
     <div style="height:8px;border-radius:4px;background:{card_color};width:{prob}%;"></div>
   </div>
   <div style="font-size:1.1em;font-weight:bold;color:{card_color};">{verdict}</div>
+  <div style="font-size:0.75em;color:#666;margin-top:8px;">追い風成分 10.0kt 以上が断続的に続く場合、RWY14 運用になる可能性があります</div>
 </div>
 """, unsafe_allow_html=True)
 
