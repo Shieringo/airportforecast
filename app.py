@@ -70,6 +70,19 @@ _ICON_B64 = base64.b64encode(_buf.getvalue()).decode()
 USERS_DIR = os.path.join(os.path.dirname(__file__), "users")
 os.makedirs(USERS_DIR, exist_ok=True)
 
+AIRPORT_COORDS = {
+    "RJCO": (43.116, 141.381), "RJEC": (43.671, 142.448),
+    "RJCK": (43.041, 144.193), "RJCB": (43.880, 144.164),
+    "RJSS": (38.140, 140.917), "RJSK": (39.616, 140.219),
+    "RJTT": (35.552, 139.780), "RJAA": (35.765, 140.386),
+    "RJGG": (34.858, 136.805), "RJNA": (35.255, 136.924),
+    "RJOO": (34.785, 135.438), "RJBB": (34.435, 135.244),
+    "RJBE": (34.633, 135.224), "RJOA": (34.436, 132.919),
+    "RJOB": (34.758, 133.855), "RJOT": (34.214, 134.016),
+    "RJOM": (33.827, 132.700), "RJFF": (33.586, 130.451),
+    "ROAH": (26.196, 127.646),
+}
+
 AIRPORTS_BY_REGION = {
     "北海道": {
         "RJCO": "札幌丘珠空港",
@@ -154,6 +167,78 @@ def fetch_metar(code):
     return data[0] if data else None
 
 
+@st.cache_data(ttl=1800)
+def fetch_bakuyake(lat: float, lon: float):
+    res = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": lat, "longitude": lon,
+            "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,visibility,precipitation",
+            "daily": "sunset",
+            "timezone": "Asia/Tokyo",
+            "forecast_days": 1,
+        },
+        timeout=10,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+def _parse_sunset_conditions(data: dict) -> dict:
+    sunset_str = data["daily"]["sunset"][0]
+    sunset_dt = datetime.fromisoformat(sunset_str)
+    times = data["hourly"]["time"]
+    target = sunset_dt.strftime("%Y-%m-%dT%H:00")
+    idx = times.index(target) if target in times else len(times) - 1
+    h = data["hourly"]
+    precip_3h = sum(v or 0 for v in h["precipitation"][max(0, idx - 2): idx + 1])
+    return {
+        "sunset_dt": sunset_dt,
+        "cloud":      h["cloud_cover"][idx] or 0,
+        "cloud_high": h["cloud_cover_high"][idx] or 0,
+        "cloud_mid":  h["cloud_cover_mid"][idx] or 0,
+        "cloud_low":  h["cloud_cover_low"][idx] or 0,
+        "humidity":   h["relative_humidity_2m"][idx] or 50,
+        "vis_m":      h["visibility"][idx] or 10000,
+        "precip_3h":  precip_3h,
+    }
+
+
+def calc_bakuyake_score(c) -> int:
+    cloud = c["cloud"]
+    # 全体雲量: 20-50% 満点、0% と 100% は 0 点
+    if cloud < 20:
+        c_s = cloud / 20.0
+    elif cloud <= 50:
+        c_s = 1.0
+    elif cloud <= 80:
+        c_s = (80 - cloud) / 30.0
+    else:
+        c_s = 0.0
+    # 高層雲: 多いほど良い
+    h_s = c["cloud_high"] / 100.0
+    # 湿度: 低いほど良い (40% 以下満点、80% 以上 0 点)
+    hum = c["humidity"]
+    hum_s = max(0.0, (80 - hum) / 40.0) if hum > 40 else 1.0
+    # 視程: 20km 以上満点
+    vis_s = min(1.0, c["vis_m"] / 20000.0)
+    # 雨上がりボーナス
+    rain_b = 1.0 if 0.5 <= c["precip_3h"] <= 15.0 else 0.0
+
+    return min(100, round((c_s * 0.40 + h_s * 0.10 + hum_s * 0.25 + vis_s * 0.15 + rain_b * 0.10) * 100))
+
+
+def judge_bakuyake(score: int):
+    if score >= 70:
+        return "🔥 爆焼けチャンス！", "#ff6b35", "hot"
+    elif score >= 50:
+        return "🌅 期待できる", "#f39c12", "warm"
+    elif score >= 30:
+        return "🌤 少し期待", "#8e9eab", "mild"
+    else:
+        return "😐 今日は厳しいかも", "#556677", "cool"
+
+
 def judge_vapor(spread):
     if spread <= 1.0:
         return "✅ ほぼ確実に出る", "#2ecc71", "green"
@@ -234,6 +319,20 @@ st.markdown("""
     .sp-val   { font-size: 2.6em; font-weight: bold; color: #fff; line-height:1.1; }
     .judgment { font-size: 1.15em; font-weight: bold; margin-top: 14px; }
     .detail   { font-size: 0.83em; color: #888; margin-top: 8px; }
+    .bakuyake-card { border-radius: 18px; padding: 22px 20px 16px; margin: 14px 0; border-left: 7px solid #555; background: #1a1a2e; }
+    .bakuyake-card.hot  { border-left-color: #ff6b35; background: #2a1200; }
+    .bakuyake-card.warm { border-left-color: #f39c12; background: #271c08; }
+    .bakuyake-card.mild { border-left-color: #8e9eab; background: #151c22; }
+    .bakuyake-card.cool { border-left-color: #445566; background: #111; }
+    .bk-header  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+    .bk-city    { font-size:1.4em; font-weight:bold; color:#fff; }
+    .bk-subtitle{ font-size:0.82em; color:#aaa; margin-top:2px; }
+    .bk-score   { font-size:2.6em; font-weight:bold; color:#fff; line-height:1.1; }
+    .bk-score-unit { font-size:0.5em; color:#888; }
+    .bk-bar-wrap{ margin:8px 0 14px; background:#333; border-radius:4px; height:8px; }
+    .bk-bar-fill{ height:8px; border-radius:4px; }
+    .bk-verdict { font-size:1.15em; font-weight:bold; margin-bottom:8px; }
+    .bk-cond    { font-size:0.83em; color:#888; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -396,3 +495,45 @@ Td = 243.04 × α / (17.625 − α)
 - 大型機・フル高揚力装置展開の着陸時 → 渦が強く出やすい
 """)
     st.caption("データソース: aviationweather.gov（METAR）| 30分キャッシュ")
+
+# 爆焼け予報セクション
+st.divider()
+st.markdown("### 🌅 爆焼け予報")
+st.caption("日没時の気象データから爆焼けの可能性をスコア化します")
+
+bk_code = selected_code if selected_code and selected_code in AIRPORT_COORDS else None
+
+if bk_code is None:
+    st.info("空港を選ぶと、その地点の爆焼けスコアが表示されます。")
+else:
+    try:
+        lat, lon = AIRPORT_COORDS[bk_code]
+        raw = fetch_bakuyake(lat, lon)
+        cond = _parse_sunset_conditions(raw)
+        score = calc_bakuyake_score(cond)
+        verdict, color, cls = judge_bakuyake(score)
+        bar_colors = {"hot": "#ff6b35", "warm": "#f39c12", "mild": "#8e9eab", "cool": "#445566"}
+        bar_color = bar_colors[cls]
+        sunset_str = cond["sunset_dt"].strftime("%H:%M")
+        airport_name = get_airport_name(bk_code)
+        vis_km = cond["vis_m"] / 1000
+        rain_txt = "　🌂 雨上がり" if cond["precip_3h"] >= 0.5 else ""
+        st.markdown(f"""
+<div class="bakuyake-card {cls}">
+  <div class="bk-header">
+    <div>
+      <div class="bk-city">{airport_name}</div>
+      <div class="bk-subtitle">日没 {sunset_str}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:0.72em;color:#999;">爆焼けスコア</div>
+      <div class="bk-score">{score}<span class="bk-score-unit"> / 100</span></div>
+    </div>
+  </div>
+  <div class="bk-bar-wrap"><div class="bk-bar-fill" style="width:{score}%;background:{bar_color};"></div></div>
+  <div class="bk-verdict" style="color:{color};">{verdict}</div>
+  <div class="bk-cond">雲量 {cond['cloud']}%　高層雲 {cond['cloud_high']}%　湿度 {cond['humidity']}%　視程 {vis_km:.0f}km{rain_txt}</div>
+</div>
+""", unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"データ取得エラー: {e}")
