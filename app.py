@@ -9,6 +9,7 @@ import re
 import requests
 from pathlib import Path
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -564,6 +565,26 @@ st.markdown("""<script>
 })();
 </script>""", unsafe_allow_html=True)
 
+# components.html()経由でもapple-touch-iconを注入（srcdocはsame-originのためwindow.parentにアクセス可能）
+components.html("""<script>
+(function(){
+  try {
+    var p = window.parent;
+    p.document.querySelectorAll('link[rel~="apple-touch-icon"]').forEach(function(el){ el.parentNode.removeChild(el); });
+    var l = p.document.createElement('link');
+    l.rel = 'apple-touch-icon';
+    l.sizes = '180x180';
+    l.href = '/app/static/apple-touch-icon.png?v=5';
+    p.document.head.appendChild(l);
+    p.document.querySelectorAll('link[rel="manifest"]').forEach(function(el){ el.parentNode.removeChild(el); });
+    var m = p.document.createElement('link');
+    m.rel = 'manifest';
+    m.href = '/app/static/manifest.json?v=5';
+    p.document.head.appendChild(m);
+  } catch(e) {}
+})();
+</script>""", height=0)
+
 st.markdown("""
 <style>
     header[data-testid="stHeader"] { display: none !important; }
@@ -635,7 +656,24 @@ if not user_id:
         slug = uname.strip().lower()
         if re.match(r'^[a-zA-Z0-9_-]{1,20}$', slug):
             st.query_params["u"] = slug
-            st.rerun()
+            # URLが?u=slugになった状態でホーム画面追加を案内
+            st.success("✅ 設定完了！")
+            st.markdown(f"""
+---
+### 📱 ホーム画面への追加方法
+
+今のURL（末尾に `?u={slug}` が入っています）をそのままホーム画面に追加してください。
+
+**Safariの場合**
+1. 下部の **共有ボタン（↑）** をタップ
+2. **「ホーム画面に追加」** を選択
+3. 名前はそのままで **「追加」** をタップ
+
+> ⚠️ 古いアイコンがホーム画面にある場合は、先に**削除してから追加**してください。
+""")
+            if st.button("アプリを開く →", type="primary", use_container_width=True):
+                st.rerun()
+            st.stop()
         else:
             st.error("英数字・ハイフン・アンダースコアのみ使えます（最大20文字）")
     st.stop()
