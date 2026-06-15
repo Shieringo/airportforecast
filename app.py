@@ -75,23 +75,11 @@ def _make_icon():
     return img
 
 
-# モジュールロード時に生成（PIL Image → page_icon に直接渡す / base64 → apple-touch-icon JS注入用）
+# アイコン生成（page_icon用 + ヘッダー表示用base64）
 _ICON_IMG = _make_icon()
 _buf = io.BytesIO()
 _ICON_IMG.convert("RGB").save(_buf, format="PNG")
 _ICON_B64 = base64.b64encode(_buf.getvalue()).decode()
-
-# 静的ファイルを生成（iOS ホーム画面アイコン + Web App Manifest）
-_static_dir = Path(__file__).parent / "static"
-_static_dir.mkdir(exist_ok=True)
-_ICON_IMG.save(str(_static_dir / "apple-touch-icon.png"), format="PNG")
-(_static_dir / "manifest.json").write_text(
-    '{"name":"Airport Forcast","short_name":"Airport",'
-    '"start_url":".","display":"standalone",'
-    '"background_color":"#12122a","theme_color":"#12122a",'
-    '"icons":[{"src":"/app/static/apple-touch-icon.png","sizes":"180x180","type":"image/png"}]}',
-    encoding="utf-8",
-)
 
 AIRPORT_COORDS = {
     "RJCO": (43.116, 141.381), "RJEC": (43.671, 142.448),
@@ -565,15 +553,14 @@ st.markdown("""<script>
   var l = document.createElement('link');
   l.rel = 'apple-touch-icon';
   l.sizes = '180x180';
-  l.href = '/app/static/apple-touch-icon.png?v=3';
+  l.href = '/app/static/apple-touch-icon.png?v=5';
   document.head.appendChild(l);
   // ── Web App Manifest ──
-  if (!document.querySelector('link[rel="manifest"]')) {
-    var m = document.createElement('link');
-    m.rel = 'manifest';
-    m.href = '/app/static/manifest.json';
-    document.head.appendChild(m);
-  }
+  document.querySelectorAll('link[rel="manifest"]').forEach(function(el){ el.parentNode.removeChild(el); });
+  var m = document.createElement('link');
+  m.rel = 'manifest';
+  m.href = '/app/static/manifest.json?v=5';
+  document.head.appendChild(m);
 })();
 </script>""", unsafe_allow_html=True)
 
