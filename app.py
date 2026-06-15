@@ -565,22 +565,52 @@ st.markdown("""<script>
 })();
 </script>""", unsafe_allow_html=True)
 
-# components.html()経由でもapple-touch-iconを注入（srcdocはsame-originのためwindow.parentにアクセス可能）
+# components.html()経由でapple-touch-icon注入 + Streamlit余分UIをMutationObserverで動的非表示
 components.html("""<script>
 (function(){
+  var p = window.parent;
+  if (!p) return;
+
+  // ── apple-touch-icon & manifest ──
   try {
-    var p = window.parent;
     p.document.querySelectorAll('link[rel~="apple-touch-icon"]').forEach(function(el){ el.parentNode.removeChild(el); });
     var l = p.document.createElement('link');
-    l.rel = 'apple-touch-icon';
-    l.sizes = '180x180';
-    l.href = '/app/static/apple-touch-icon.png?v=5';
+    l.rel = 'apple-touch-icon'; l.sizes = '180x180';
+    l.href = '/app/static/apple-touch-icon.png?v=6';
     p.document.head.appendChild(l);
     p.document.querySelectorAll('link[rel="manifest"]').forEach(function(el){ el.parentNode.removeChild(el); });
     var m = p.document.createElement('link');
-    m.rel = 'manifest';
-    m.href = '/app/static/manifest.json?v=5';
+    m.rel = 'manifest'; m.href = '/app/static/manifest.json?v=6';
     p.document.head.appendChild(m);
+  } catch(e) {}
+
+  // ── Streamlit余分UI非表示（MutationObserver）──
+  var HIDE = [
+    '[data-testid="stStatusWidget"]',
+    '[data-testid="stToolbar"]',
+    '[data-testid="stToolbarActions"]',
+    '[data-testid="manage-app-button"]',
+    '[data-testid="stDeployButton"]',
+    '[data-testid="stAppDeployButton"]',
+    '[data-testid="stMainMenu"]',
+    '[data-testid="stBottom"]',
+    '[data-testid="stBottomBlockContainer"]',
+    '[data-testid="stHamburger"]',
+    '#MainMenu',
+    'button[title="View app source"]',
+    'button[title="Manage app"]',
+    'button[aria-label="Manage app"]',
+  ];
+  function hideAll() {
+    try {
+      HIDE.forEach(function(sel){
+        p.document.querySelectorAll(sel).forEach(function(el){ el.style.setProperty('display','none','important'); });
+      });
+    } catch(e) {}
+  }
+  hideAll();
+  try {
+    new p.MutationObserver(hideAll).observe(p.document.body, {childList:true, subtree:true});
   } catch(e) {}
 })();
 </script>""", height=0)
@@ -589,11 +619,19 @@ st.markdown("""
 <style>
     header[data-testid="stHeader"] { display: none !important; }
     footer { display: none !important; }
+    #MainMenu { display: none !important; }
     [data-testid="stStatusWidget"] { display: none !important; }
     [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stToolbarActions"] { display: none !important; }
     [data-testid="manage-app-button"] { display: none !important; }
     [data-testid="stDeployButton"] { display: none !important; }
-    #MainMenu { display: none !important; }
+    [data-testid="stAppDeployButton"] { display: none !important; }
+    [data-testid="stMainMenu"] { display: none !important; }
+    [data-testid="stBottom"] { display: none !important; }
+    [data-testid="stBottomBlockContainer"] { display: none !important; }
+    [data-testid="stHamburger"] { display: none !important; }
+    button[title="View app source"] { display: none !important; }
+    button[title="Manage app"] { display: none !important; }
     .block-container { padding-top: 1rem !important; }
     .main > div { padding: 1rem 0.6rem; }
     h1 a, h2 a, h3 a, h4 a { display: none !important; }
