@@ -376,7 +376,7 @@ function renderVapor(m){
   else if(sp<=3.0){emoji='⚡';label='可能性あり';desc=`スプレッドが${sp}°Cで、条件が整えばベイパーが見えるかもしれません。`;}
   else{emoji='❌';label='やや厳しい';desc=`スプレッドが${sp}°Cで、現状ではベイパーの発生は難しそうです。`;}
   const obsT=m.reportTime?m.reportTime.substring(11,16)+' UTC':'—';
-  const wdir=m.wdir!=null?`${m.wdir}°`:'—';
+  const wdir=m.wdir==null?'—':(m.wdir==='VRB'?'VRB':`${m.wdir}°`);
   const wspd=m.wspd!=null?`${m.wspd}kt`:'—';
   const gust=m.wgst?` (G${m.wgst}kt)`:'';
   el.innerHTML=`
