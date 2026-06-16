@@ -13,8 +13,8 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0e1117;--card:#1a1d27;--border:#2d3147;
-  --accent:#4c6ef5;--text:#fafafa;--sub:#8892b0;
+  --bg:#0d1117;--card:#161b2e;--border:#2a3460;
+  --accent:#4c6ef5;--text:#f0f4ff;--sub:#8892b0;
   --red:#ff6b6b;--yellow:#fcc419;--green:#51cf66
 }
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic UI',sans-serif;min-height:100vh;font-size:14px;line-height:1.5}
@@ -57,8 +57,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:12p
 
 /* Cards */
 main{padding:12px 16px;display:flex;flex-direction:column;gap:12px;padding-bottom:max(20px,env(safe-area-inset-bottom))}
-.card{background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--border)}
-.card h2{font-size:14px;font-weight:700;margin-bottom:14px;color:var(--text)}
+.card{background:var(--card);border-radius:12px;padding:16px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.card h2{font-size:14px;font-weight:700;margin-bottom:14px;color:var(--text);padding-bottom:10px;border-bottom:1px solid var(--border)}
 
 /* Vapor / One4 status block */
 .status-block{display:flex;align-items:flex-start;gap:12px;padding:12px;background:var(--bg);border-radius:8px;margin-bottom:14px}
@@ -144,7 +144,8 @@ main{padding:12px 16px;display:flex;flex-direction:column;gap:12px;padding-botto
     </div>
     <div class="h-right">
       <span id="user-label"></span>
-      <button class="icon-btn" onclick="openSettings()">⚙️</button>
+      <button class="icon-btn" onclick="reloadData()" title="再読み込み">🔄</button>
+      <button class="icon-btn" onclick="openSettings()" title="設定">⚙️</button>
     </div>
   </header>
 
@@ -259,8 +260,10 @@ function init(){
   username=p.get('u')||localStorage.getItem('username')||'';
   const bmStr=p.get('bm')||localStorage.getItem('bookmarks');
   if(bmStr){
-    const arr=(bmStr.startsWith('['))?JSON.parse(bmStr):bmStr.split(',');
-    bookmarks=arr.filter(c=>AIRPORTS[c]);
+    try{
+      const arr=(bmStr.startsWith('['))?JSON.parse(bmStr):bmStr.split(',');
+      bookmarks=arr.filter(c=>AIRPORTS[c]);
+    }catch(e){bookmarks=['RJOO'];}
   }
   if(!bookmarks.length) bookmarks=['RJOO'];
   const d=p.get('def')||localStorage.getItem('default')||bookmarks[0];
@@ -313,12 +316,12 @@ async function loadAP(code){
   cardsEl.style.opacity='.4';
   try{
     const[metar,fc]=await Promise.all([fetchMetar(code),fetchFc(code)]);
-    renderVapor(metar);
-    renderBakuyake(fc);
-    renderMoon(code);
+    try{renderVapor(metar);}catch(e){document.getElementById('vapor-body').innerHTML='<p class="err">⚠️ ベイパー描画エラー: '+e.message+'</p>';}
+    try{renderBakuyake(fc);}catch(e){document.getElementById('bk-body').innerHTML='<p class="err">⚠️ 爆焼け描画エラー: '+e.message+'</p>';}
+    try{renderMoon(code);}catch(e){document.getElementById('moon-body').innerHTML='<p class="err">⚠️ 月情報描画エラー: '+e.message+'</p>';}
     if(code==='RJOO'){
       document.getElementById('one4-card').style.display='block';
-      renderOne4(metar);
+      try{renderOne4(metar);}catch(e){document.getElementById('one4-body').innerHTML='<p class="err">⚠️ ワンフォー描画エラー: '+e.message+'</p>';}
     } else {
       document.getElementById('one4-card').style.display='none';
     }
@@ -333,9 +336,12 @@ async function fetchMetar(code){
   const k=`m-${code}`;const cached=getCached(k);if(cached)return cached;
   try{
     const r=await fetch(`https://aviationweather.gov/api/data/metar?ids=${code}&format=json`);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
-    if(Array.isArray(d)&&d.length){setCache(k,d[0]);return d[0];}
-  }catch(e){console.warn('METAR',e);}
+    const arr=Array.isArray(d)?d:(d.data||[]);
+    if(arr.length){setCache(k,arr[0]);return arr[0];}
+    console.warn('METAR: empty response for',code);
+  }catch(e){console.warn('METAR fetch failed:',e.message);}
   return null;
 }
 
@@ -401,7 +407,7 @@ function calcBK(c){
 // ===== RENDER BAKUYAKE =====
 function renderBakuyake(fc){
   const el=document.getElementById('bk-body');
-  if(!fc||!fc.daily){el.innerHTML='<p class="err">⚠️ 予報データを取得できませんでした</p>';return;}
+  if(!fc||!fc.daily||!fc.hourly){el.innerHTML='<p class="err">⚠️ 予報データを取得できませんでした</p>';return;}
   const daily=fc.daily,hr=fc.hourly;
   let html=`<table class="bk-table"><thead><tr><th>日付</th><th>日没</th><th>スコア</th><th>判定</th></tr></thead><tbody>`;
   for(let i=0;i<Math.min(7,daily.time.length);i++){
@@ -428,6 +434,7 @@ function renderBakuyake(fc){
 // ===== RENDER MOON =====
 function renderMoon(code){
   const el=document.getElementById('moon-body');
+  if(typeof SunCalc==='undefined'){el.innerHTML='<p class="err">⚠️ SunCalcライブラリの読み込みに失敗しました</p>';return;}
   const[lat,lon]=COORDS[code]||[35,135];
   const today=new Date();
   let html='<div class="moon-scroll"><div class="moon-grid">';
@@ -582,13 +589,23 @@ function savePicker(){
   loadAP(curAP);
 }
 
+// ===== RELOAD =====
+function reloadData(){
+  Object.keys(cache).forEach(k=>delete cache[k]);
+  if(curAP) loadAP(curAP);
+}
+
 // ===== SERVICE WORKER =====
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 
 // ===== START =====
-init();
+try{init();}catch(e){
+  console.error('init failed:',e);
+  document.getElementById('setup-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
 </script>
 </body>
 </html>
