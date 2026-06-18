@@ -21,7 +21,8 @@ self.addEventListener('fetch', e => {
   const url = e.request.url;
   if (url.includes('aviationweather.gov') ||
       url.includes('open-meteo.com') ||
-      url.includes('cdnjs.cloudflare.com')) {
+      url.includes('cdnjs.cloudflare.com') ||
+      url.includes('metar.json')) {
     return;
   }
   e.respondWith(
