@@ -577,14 +577,16 @@ async function loadAP(code){
     try{renderRainbow(fc,code);}catch(e){document.getElementById('rainbow-body').innerHTML='<p class="err">⚠️ 虹色コントレイル描画エラー: '+e.message+'</p>';}
     try{renderRainbowArc(fc,code);}catch(e){document.getElementById('arc-body').innerHTML='<p class="err">⚠️ レインボー描画エラー: '+e.message+'</p>';}
     try{renderMoon(code);}catch(e){document.getElementById('moon-body').innerHTML='<p class="err">⚠️ 月情報描画エラー: '+e.message+'</p>';}
+    const rbvCard=document.getElementById('rbv-card');
+    const one4Card=document.getElementById('one4-card');
     if(code==='RJOO'){
-      document.getElementById('rbv-card').style.display='block';
-      try{renderRainbowVapor(metar);}catch(e){document.getElementById('rbv-body').innerHTML='<p class="err">⚠️ 虹色ベイパー描画エラー: '+e.message+'</p>';}
-      document.getElementById('one4-card').style.display='block';
-      try{renderOne4(metar);}catch(e){document.getElementById('one4-body').innerHTML='<p class="err">⚠️ ワンフォー描画エラー: '+e.message+'</p>';}
+      if(rbvCard) rbvCard.style.display='block';
+      try{renderRainbowVapor(metar);}catch(e){const el=document.getElementById('rbv-body');if(el)el.innerHTML='<p class="err">⚠️ 虹色ベイパー描画エラー: '+e.message+'</p>';}
+      if(one4Card) one4Card.style.display='block';
+      try{renderOne4(metar);}catch(e){const el=document.getElementById('one4-body');if(el)el.innerHTML='<p class="err">⚠️ ワンフォー描画エラー: '+e.message+'</p>';}
     } else {
-      document.getElementById('rbv-card').style.display='none';
-      document.getElementById('one4-card').style.display='none';
+      if(rbvCard) rbvCard.style.display='none';
+      if(one4Card) one4Card.style.display='none';
     }
   } finally {
     loadEl.style.display='none';
@@ -1087,47 +1089,64 @@ function renderOne4(m){
 </div>`;
 }
 
-// ===== RAINBOW VAPOR (RJOO RWY32 left-turn) =====
+// ===== RAINBOW VAPOR (RJOO — sun-azimuth based) =====
 function renderRainbowVapor(m){
   const el=document.getElementById('rbv-body');
   if(!m){el.innerHTML='<p class="err">⚠️ METARデータなし</p>';return;}
   const t=m.temp,d=m.dewp;
   if(t==null||d==null){el.innerHTML='<p class="err">⚠️ 気温・露点データがありません</p>';return;}
 
-  // 湿度スコア
+  // 湿度スコア（スプレッドから）
   const sp=Math.round((t-d)*10)/10;
   let humScore;
   if(sp<=1.0) humScore=100;
   else if(sp<=3.0) humScore=Math.round((3.0-sp)/2.0*100);
   else humScore=0;
 
-  // 時間帯スコア（JST）
-  const nowJST=new Date(Date.now()+9*3600000);
-  const h=nowJST.getUTCHours()+nowJST.getUTCMinutes()/60;
-  let sunScore,sunLabel;
-  if(h>=7&&h<9){sunScore=100;sunLabel='朝日が東・逆光ベイパー最適';}
-  else if(h>=9&&h<11){sunScore=80;sunLabel='朝の光 良好';}
-  else if(h>=6&&h<7){sunScore=40;sunLabel='夜間門限前（7時から運航再開）';}
-  else if(h>=11&&h<14){sunScore=30;sunLabel='太陽が高くなる時間帯';}
-  else{sunScore=10;sunLabel='午後〜夜間は条件が難しい';}
+  // 太陽位置（SunCalc）— RJOO座標
+  const now=new Date();
+  const sunPos=SunCalc.getPosition(now,34.785,135.438);
+  const sunAzDeg=Math.round((sunPos.azimuth*180/Math.PI+180+360)%360);
+  const sunElDeg=Math.round(sunPos.altitude*180/Math.PI);
+
+  // 太陽仰角スコア（低いほど色が出やすい）
+  let sunScore,sunElLabel;
+  if(sunElDeg<0){sunScore=0;sunElLabel='日没後・日の出前（太陽なし）';}
+  else if(sunElDeg<5){sunScore=20;sunElLabel='地平線スレスレ';}
+  else if(sunElDeg<15){sunScore=100;sunElLabel='黄金角度 — 最高条件';}
+  else if(sunElDeg<30){sunScore=90;sunElLabel='低空で良好';}
+  else if(sunElDeg<45){sunScore=60;sunElLabel='やや高め';}
+  else if(sunElDeg<60){sunScore=30;sunElLabel='太陽が高い';}
+  else{sunScore=10;sunElLabel='真上に近く難しい';}
 
   // 総合スコア
-  const total=Math.round(humScore*0.7+sunScore*0.3);
+  const total=Math.round(humScore*0.6+sunScore*0.4);
 
   let color,verdict;
   if(total>=70){color='#d946ef';verdict='🌈 虹色ベイパー チャンス！';}
   else if(total>=40){color='#f39c12';verdict='⚡ 条件が揃いつつある';}
   else{color='#445566';verdict='❌ 今は条件が揃っていない';}
 
+  // 太陽方位の方角名
+  const compassDirs=['北','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西'];
+  const sunCompass=compassDirs[Math.round(sunAzDeg/22.5)%16];
+
+  // 虹色ベイパーが出やすい飛行機の進行方向（太陽方位 ±30°）
+  const lo=(sunAzDeg-30+360)%360, hi=(sunAzDeg+30)%360;
+  const optDir=lo<=hi?`${lo}°〜${hi}°`:` ${lo}°〜360° / 0°〜${hi}°`;
+  const optCompassLo=compassDirs[Math.round(lo/22.5)%16];
+  const optCompassHi=compassDirs[Math.round(hi/22.5)%16];
+
+  const nowJST=new Date(Date.now()+9*3600000);
   const hStr=String(nowJST.getUTCHours()).padStart(2,'0')+':'+String(nowJST.getUTCMinutes()).padStart(2,'0');
 
   el.innerHTML=`
 <div style="border-radius:18px;padding:18px 20px;margin:8px 0;border-left:7px solid ${color};background:#1a0a2e;">
-  <div style="font-size:0.78em;color:#999;margin-bottom:6px;">🌈 RWY32 離陸→左旋回 — 大阪国際空港</div>
+  <div style="font-size:0.78em;color:#999;margin-bottom:6px;">🌈 虹色ベイパー — 大阪国際空港 ${hStr} JST</div>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
     <div>
       <div style="font-size:1.3em;font-weight:bold;color:#fff;">虹色ベイパースコア</div>
-      <div style="font-size:0.82em;color:#aaa;margin-top:3px;">猪名寺・塚口・伊丹市南部 が最適スポット</div>
+      <div style="font-size:0.82em;color:#aaa;margin-top:3px;">猪名寺・塚口・伊丹市南部</div>
     </div>
     <div style="text-align:right;">
       <div style="font-size:0.72em;color:#999;">スコア</div>
@@ -1144,9 +1163,14 @@ function renderRainbowVapor(m){
       <span style="font-weight:bold;color:#fff;">${humScore}点</span>
     </div>
     <div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.05);border-radius:8px;">
-      <span style="color:#aaa;">☀️ 時間帯 ${hStr} JST — ${sunLabel}</span>
+      <span style="color:#aaa;">☀️ 太陽 ${sunAzDeg}° ${sunCompass} / 仰角 ${sunElDeg}° — ${sunElLabel}</span>
       <span style="font-weight:bold;color:#fff;">${sunScore}点</span>
     </div>
+  </div>
+  <div style="margin-top:10px;padding:10px 12px;background:rgba(217,70,239,.12);border:1px solid rgba(217,70,239,.3);border-radius:10px;font-size:0.84em;">
+    <div style="color:#e879f9;font-weight:bold;margin-bottom:4px;">✈ 今この方向に向かう飛行機でチャンス</div>
+    <div style="color:#fff;font-size:1.1em;font-weight:bold;">${optDir}</div>
+    <div style="color:#aaa;margin-top:2px;">${optCompassLo} 〜 ${optCompassHi} 方向</div>
   </div>
 </div>`;
 }
