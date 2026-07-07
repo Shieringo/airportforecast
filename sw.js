@@ -1,4 +1,4 @@
-const CACHE = 'airport-v3';
+const CACHE = 'airport-v4';
 const STATIC = ['/', '/index.html', '/apple-touch-icon.png', '/manifest.json'];
 
 self.addEventListener('install', e => {
